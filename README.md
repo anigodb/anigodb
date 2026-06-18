@@ -1,6 +1,8 @@
-# AnigoDB
-
-A document database library wrapping better-sqlite3-multiple-ciphers with a MongoDB-style API. Built for Node.js — synchronous, fast, and embeddable.
+<div align="center">
+  <img src="./icon/logo_b.png" alt="AnigoDB logo" width="600">
+  <h2><strong>Anything Goes</strong></h2>
+  <p>AnigoDB is a document database library with DB-level data encryption and MongoDB-style API. Built for Node.js — synchronous, fast, and embeddable.</p>
+</div>
 
 ```js
 import { AnigoDB } from 'anigodb'
@@ -76,21 +78,21 @@ db.close()
 
 ## Documentation
 
-| Topic | File |
-|-------|------|
-| Getting Started | [docs/01-getting-started.md](docs/01-getting-started.md) |
-| API Reference | [docs/02-api-reference.md](docs/02-api-reference.md) |
-| Query Operators | [docs/03-query-operators.md](docs/03-query-operators.md) |
+| Topic            | File                                                       |
+| ---------------- | ---------------------------------------------------------- |
+| Getting Started  | [docs/01-getting-started.md](docs/01-getting-started.md)   |
+| API Reference    | [docs/02-api-reference.md](docs/02-api-reference.md)       |
+| Query Operators  | [docs/03-query-operators.md](docs/03-query-operators.md)   |
 | Update Operators | [docs/04-update-operators.md](docs/04-update-operators.md) |
-| Indexes | [docs/05-indexes.md](docs/05-indexes.md) |
-| Encryption | [docs/06-encryption.md](docs/06-encryption.md) |
-| Transactions | [docs/07-transactions.md](docs/07-transactions.md) |
-| Bulk Operations | [docs/08-bulk-operations.md](docs/08-bulk-operations.md) |
-| Aggregation | [docs/09-aggregation.md](docs/09-aggregation.md) |
-| Error Handling | [docs/10-error-handling.md](docs/10-error-handling.md) |
-| Configuration | [docs/11-configuration.md](docs/11-configuration.md) |
-| FAQ | [docs/12-faq.md](docs/12-faq.md) |
-| RAG Search | [docs/13-rag-search.md](docs/13-rag-search.md) |
+| Indexes          | [docs/05-indexes.md](docs/05-indexes.md)                   |
+| Encryption       | [docs/06-encryption.md](docs/06-encryption.md)             |
+| Transactions     | [docs/07-transactions.md](docs/07-transactions.md)         |
+| Bulk Operations  | [docs/08-bulk-operations.md](docs/08-bulk-operations.md)   |
+| Aggregation      | [docs/09-aggregation.md](docs/09-aggregation.md)           |
+| Error Handling   | [docs/10-error-handling.md](docs/10-error-handling.md)     |
+| Configuration    | [docs/11-configuration.md](docs/11-configuration.md)       |
+| FAQ              | [docs/12-faq.md](docs/12-faq.md)                           |
+| RAG Search       | [docs/13-rag-search.md](docs/13-rag-search.md)             |
 
 ## Examples
 
