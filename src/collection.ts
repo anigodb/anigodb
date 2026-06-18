@@ -175,10 +175,12 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
   updateOne(filter: Filter<T>, update: Record<string, unknown>, options?: UpdateOptions): UpdateResult {
     this.ensureTable()
     const compiled = compileUpdate(update)
+    let created = false
     const id: string | null = this.transaction(() => {
       const doc = this.findOne(filter)
       if (!doc) {
         if (options?.upsert) {
+          created = true
           const filterDoc = { ...filter as Record<string, unknown> }
           const insertDoc = this.applyUpdateToDoc(filterDoc, update)
           const result = this.insertOne(insertDoc as OptionalId<T>)
@@ -187,17 +189,15 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
         return null
       }
 
-      const docData = this.applyPushPull(doc, compiled.pushPull)
+      this.applyPushPull(doc, compiled.pushPull)
       const updateSql = buildUpdateSQL(compiled)
 
-      if (!updateSql && compiled.pushPull.length === 0) {
-        return doc._id
+      if (updateSql) {
+        const now = new Date().toISOString()
+        const allParams = [...compiled.params, now, doc._id]
+        this.db.prepare(`UPDATE ${this.escapeId(this.collectionName)} SET doc = ${updateSql}, updated_at = ? WHERE _id = ?`)
+          .run(...allParams)
       }
-
-      const now = new Date().toISOString()
-      const allParams = [...compiled.params, now, doc._id]
-      this.db.prepare(`UPDATE ${this.escapeId(this.collectionName)} SET doc = ${updateSql}, updated_at = ? WHERE _id = ?`)
-        .run(...allParams)
 
       return doc._id
     })
@@ -206,7 +206,7 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       return { acknowledged: true, matchedCount: 0, modifiedCount: 0, upsertedId: null }
     }
 
-    return { acknowledged: true, matchedCount: 1, modifiedCount: 1, upsertedId: options?.upsert ? id : null }
+    return { acknowledged: true, matchedCount: created ? 0 : 1, modifiedCount: 1, upsertedId: created ? id : null }
   }
 
   updateMany(filter: Filter<T>, update: Record<string, unknown>): UpdateResult {
@@ -218,10 +218,10 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       let modified = 0
 
       for (const doc of docs) {
-        const docData = this.applyPushPull(doc, compiled.pushPull)
+        this.applyPushPull(doc, compiled.pushPull)
         const updateSql = buildUpdateSQL(compiled)
 
-        if (!updateSql && compiled.pushPull.length === 0) continue
+        if (!updateSql) continue
 
         const now = new Date().toISOString()
         const allParams = [...compiled.params, now, doc._id]
@@ -370,10 +370,10 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       const arr = (data[pp.field] as unknown[]) || []
       if (pp.operator === 'push') {
         arr.push(pp.value)
+        data[pp.field] = arr
       } else {
         data[pp.field] = arr.filter(item => item !== pp.value)
       }
-      data[pp.field] = arr
     }
 
     const now = new Date().toISOString()
@@ -425,7 +425,7 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
     this.ensureTable()
     if (!this.ragManager) return []
     const limit = options?.limit || 10
-    const rows = this.ragManager.search<Record<string, unknown>>(this.collectionName, query, limit, options?.filter)
+    const rows = this.ragManager.search<Record<string, unknown>>(this.collectionName, query, limit)
     return rows.map(r => {
       const doc = typeof r.doc === 'string' ? JSON.parse(r.doc) : {}
       const result: Record<string, unknown> = { _score: r._score, _id: r._id }

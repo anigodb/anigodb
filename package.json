@@ -18,7 +18,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "scripts": {
     "build": "tsc && tsc --project tsconfig.cjs.json",
@@ -46,20 +47,22 @@
     "fts5",
     "hybrid-search",
     "encryption",
-    "nosql"
+    "nosql",
+    "anigodb",
+    "anigo"
   ],
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
     "better-sqlite3-multiple-ciphers": "^12.10.0",
-    "sqlite-hybrid": "^0.1.1",
-    "hf-embedder": "^0.2.1"
+    "hf-embedder": "^0.2.1",
+    "sqlite-hybrid": "^0.1.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "typescript": "^5.8.3",
-    "vitest": "^4.1.8",
-    "@types/better-sqlite3": "^7.6.13"
+    "vitest": "^4.1.8"
   },
   "license": "MIT",
   "allowScripts": {

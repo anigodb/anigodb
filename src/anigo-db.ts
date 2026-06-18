@@ -71,7 +71,7 @@ export class AnigoDB {
     return rows.map(r => {
       const doc = typeof r.doc === 'string' ? JSON.parse(r.doc) : {}
       delete r.doc
-      return { ...r, ...doc } as T
+      return { _collection: r._table, ...r, ...doc } as T
     })
   }
 

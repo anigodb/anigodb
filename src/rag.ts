@@ -55,7 +55,7 @@ export class RagManager {
     this.hybrid!.createFTS5(table, extractExpr)
   }
 
-  search<T>(table: string, query: string, limit: number, filter?: Record<string, unknown>): T[] {
+  search<T>(table: string, query: string, limit: number): T[] {
     this.ensureInitialized()
     const results = this.hybrid!.hybridSearch(table, query, limit) as T[]
     return results

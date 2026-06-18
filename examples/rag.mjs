@@ -55,11 +55,7 @@ console.log(`Inserted ${notes.countDocuments({})} documents`)
 console.log()
 
 // --- Search ---
-// Using { flush: true } ensures all pending embeddings are computed before
-// the query runs. Without flush, search returns results from whatever has
-// been indexed so far (eventual consistency).
-
-const results1 = notes.search('machine learning', { limit: 3, flush: true })
+const results1 = notes.search('machine learning', { limit: 3 })
 console.log(`Search "machine learning" returned ${results1.length} results:`)
 for (const r of results1) {
   console.log(`  [${r._score.toFixed(3)}] ${r.title}`)

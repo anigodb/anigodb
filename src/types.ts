@@ -115,8 +115,6 @@ export interface FindOneAndReplaceOptions {
 
 export interface SearchOptions {
   limit?: number
-  filter?: Record<string, unknown>
-  flush?: boolean
 }
 
 export interface SearchResult<T> {

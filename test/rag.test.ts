@@ -39,6 +39,46 @@ describe('RAG via sqlite-hybrid', () => {
     if (existsSync(path)) rmSync(path)
   })
 
+  it('handles tables without explicit INTEGER PRIMARY KEY', () => {
+    const path = join(tmpdir(), `anigodb-rag-implicit-rowid-${Date.now()}.db`)
+    const db = new Database(path)
+
+    // AnigoDB-style table: no explicit rowid column, only TEXT _id
+    db.exec(`CREATE TABLE items (
+      _id TEXT NOT NULL UNIQUE,
+      doc TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`)
+
+    const hybrid = new SqliteHybrid(db, {
+      vectorSize: 4,
+      // createVectorIndex calls onEmbed with an array; the SQL function calls it with a single string
+      onEmbed: (texts) => {
+        if (Array.isArray(texts)) {
+          return texts.map(() => new Float32Array([0.1, 0.2, 0.3, 0.4]))
+        }
+        return new Float32Array([0.1, 0.2, 0.3, 0.4])
+      },
+    })
+
+    // Insert BEFORE creating index (forces the backfill path in createVectorIndex)
+    const insert = db.prepare(`INSERT INTO items (_id, doc, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+    for (let i = 0; i < 10; i++) {
+      insert.run(`rec_${i}`, JSON.stringify({ email: `user${i}@example.com` }), 'now', 'now')
+    }
+
+    // Must not throw "Only integers are allows for primary key values"
+    hybrid.createVectorIndex('items', "json_extract(doc, '$.email')")
+    hybrid.createFTS5('items', "json_extract(doc, '$.email')")
+
+    const results = hybrid.hybridSearch('items', 'user', 10)
+    expect(Array.isArray(results)).toBe(true)
+
+    db.close()
+    if (existsSync(path)) rmSync(path)
+  })
+
   it('supports global search across tables', () => {
     const path = join(tmpdir(), `anigodb-rag-test-${Date.now()}.db`)
     const db = new Database(path)
