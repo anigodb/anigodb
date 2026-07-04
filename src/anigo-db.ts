@@ -3,9 +3,9 @@ import { Collection } from './collection.js'
 import { InvalidPathError } from './errors.js'
 import { generateObjectId } from './object-id.js'
 import { RagManager } from './rag.js'
-import type { AnigoDBOptions } from './types.js'
+import type { AnigoDBOptions, RAGProvider } from './types.js'
 
-export class AnigoDB {
+export class AnigoDB implements RAGProvider {
   private db: Database.Database
   private collections = new Map<string, Collection<any>>()
   private objectIdFn: () => string
@@ -43,6 +43,21 @@ export class AnigoDB {
     this.db.function('regexp', (pattern: unknown, value: unknown) => {
       return new RegExp(pattern as string).test(value as string) ? 1 : 0
     })
+
+    if (this.hasExistingRAGIndexes()) {
+      this.getRagManager().ensureInitialized()
+    }
+  }
+
+  private hasExistingRAGIndexes(): boolean {
+    try {
+      const row = this.db.prepare(
+        `SELECT COUNT(*) AS count FROM _sqlite_hybrid_indexes WHERE has_vector = 1`
+      ).get() as { count: number }
+      return row.count > 0
+    } catch {
+      return false
+    }
   }
 
   getRagManager(): RagManager {
@@ -66,8 +81,13 @@ export class AnigoDB {
     return control()
   }
 
-  search<T = any>(query: string, options?: { limit?: number }): T[] {
-    const rows = this.getRagManager().globalSearch<Record<string, unknown>>(query, options?.limit || 10)
+  search<T>(table: string, query: string, limit: number): T[]
+  search<T = any>(query: string, options?: { limit?: number }): T[]
+  search<T>(tableOrQuery: string, queryOrOptions?: string | { limit?: number }, limit?: number): T[] {
+    if (typeof queryOrOptions === 'string') {
+      return this.getRagManager().search<T>(tableOrQuery, queryOrOptions, limit ?? 10)
+    }
+    const rows = this.getRagManager().globalSearch<Record<string, unknown>>(tableOrQuery, queryOrOptions?.limit || 10)
     return rows.map(r => {
       const doc = typeof r.doc === 'string' ? JSON.parse(r.doc) : {}
       delete r.doc
@@ -75,11 +95,13 @@ export class AnigoDB {
     })
   }
 
+  createRAGIndex(table: string, field: string): void {
+    this.getRagManager().createRAGIndex(table, field)
+  }
+
   close(): void {
+    this._rag?.close()
     this.db.close()
   }
 
-  get raw(): Database.Database | undefined {
-    return undefined
-  }
 }

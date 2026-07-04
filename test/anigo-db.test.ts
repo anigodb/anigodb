@@ -84,6 +84,30 @@ describe('AnigoDB', () => {
     db.close()
   })
 
+  it('reopen with RAG indexes does not break inserts', () => {
+    const path = join(tmpdir(), `anigodb-rag-reopen-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
+    const db1 = AnigoDB.connect({ path })
+    const col1 = db1.collection('items')
+    col1.insertOne({ title: 'first' })
+    db1.createRAGIndex('items', 'title')
+    col1.insertOne({ title: 'second' })
+    const results1 = db1.search('items', 'first', 10)
+    expect(results1.length).toBeGreaterThan(0)
+    db1.close()
+
+    // Reopen and insert WITHOUT calling createRAGIndex or search
+    const db2 = AnigoDB.connect({ path })
+    const col2 = db2.collection('items')
+    expect(() => {
+      col2.insertOne({ title: 'third' })
+    }).not.toThrow()
+    const results2 = db2.search('items', 'third', 10)
+    expect(results2.length).toBeGreaterThan(0)
+    db2.close()
+
+    if (existsSync(path)) rmSync(path)
+  })
+
   it('custom objectId generator', () => {
     let counter = 0
     const { db } = createDb({ objectId: () => `custom-${++counter}` })

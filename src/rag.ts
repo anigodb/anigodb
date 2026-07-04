@@ -2,9 +2,9 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { SqliteHybrid } from 'sqlite-hybrid'
 import { Embedder } from 'hf-embedder'
 import { RAGModelError } from './errors.js'
-import type { EmbeddingOptions } from './types.js'
+import type { EmbeddingOptions, RAGProvider } from './types.js'
 
-export class RagManager {
+export class RagManager implements RAGProvider {
   private hybrid: SqliteHybrid | null = null
   private embedder: any = null
   private initialized = false
@@ -17,7 +17,7 @@ export class RagManager {
     this.vectorSize = options?.vectorSize || 0
   }
 
-  private ensureInitialized(): void {
+  ensureInitialized(): void {
     if (this.initialized) return
 
     try {
@@ -36,7 +36,10 @@ export class RagManager {
 
       this.hybrid = new SqliteHybrid(this.db, {
         vectorSize: this.vectorSize,
-        onEmbed: (text: string) => this.embedder!.embedSync(text),
+        onEmbed: (content: string | string[]) => {
+          if (Array.isArray(content)) return this.embedder!.embedSync(content)
+          return this.embedder!.embedSync(content)
+        },
       })
 
       this.initialized = true
@@ -65,5 +68,13 @@ export class RagManager {
     this.ensureInitialized()
     const results = this.hybrid!.hybridSearch(query, limit) as T[]
     return results
+  }
+
+  close(): void {
+    if (this.embedder) {
+      this.embedder = null
+    }
+    this.hybrid = null
+    this.initialized = false
   }
 }
