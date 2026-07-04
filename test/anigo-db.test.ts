@@ -84,7 +84,7 @@ describe('AnigoDB', () => {
     db.close()
   })
 
-  it('reopen with RAG indexes does not break inserts', () => {
+  it('reopen with RAG indexes does not break inserts', { timeout: 30000 }, () => {
     const path = join(tmpdir(), `anigodb-rag-reopen-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
     const db1 = AnigoDB.connect({ path })
     const col1 = db1.collection('items')

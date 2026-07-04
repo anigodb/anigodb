@@ -120,10 +120,6 @@ export interface SearchOptions {
   mode?: SearchMode
 }
 
-export interface RAGProvider {
-  createRAGIndex(table: string, field: string): void
-  search<T>(table: string, query: string, limit: number, mode?: SearchMode): T[]
-}
 
 export interface SearchResult<T> {
   _score: number

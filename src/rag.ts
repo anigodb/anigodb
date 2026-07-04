@@ -2,9 +2,10 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { SqliteHybrid } from 'sqlite-hybrid'
 import { Embedder } from 'hf-embedder'
 import { RAGModelError } from './errors.js'
-import type { EmbeddingOptions, RAGProvider, SearchMode } from './types.js'
+import { fuseResults } from './rrf.js'
+import type { EmbeddingOptions, SearchMode } from './types.js'
 
-export class RagManager implements RAGProvider {
+export class RagManager {
   private hybrid: SqliteHybrid | null = null
   private embedder: any = null
   private hybridReady = false
@@ -80,57 +81,7 @@ export class RagManager implements RAGProvider {
     const vecResults = this.hybrid!.vectorSearch<Record<string, unknown>>(table, query, widerLimit)
     const keyResults = this.hybrid!.keySearch<Record<string, unknown>>(table, query, widerLimit)
 
-    return this.fuseResults(vecResults, keyResults, limit) as unknown as T[]
-  }
-
-  private fuseResults(
-    vecResults: Record<string, unknown>[],
-    keyResults: Record<string, unknown>[],
-    limit: number,
-  ) {
-    const k = 60
-
-    const vecMap = new Map<string, { rank: number; similarity: number; record: Record<string, unknown> }>()
-    vecResults.forEach((r, i) => {
-      const id = r._id as string
-      if (id != null && !vecMap.has(id)) {
-        vecMap.set(id, {
-          rank: i + 1,
-          similarity: Math.max(0, 1 - (r._score as number)),
-          record: r,
-        })
-      }
-    })
-
-    const keyMap = new Map<string, { rank: number; record: Record<string, unknown> }>()
-    keyResults.forEach((r, i) => {
-      const id = r._id as string
-      if (id != null && !keyMap.has(id)) {
-        keyMap.set(id, { rank: i + 1, record: r })
-      }
-    })
-
-    const fused = new Map<string, { rrfScore: number; similarity: number; record: Record<string, unknown> }>()
-
-    for (const [id, v] of vecMap) {
-      const keyRank = keyMap.get(id)?.rank ?? 0
-      const rrfScore = 1 / (k + v.rank) + (keyRank > 0 ? 1 / (k + keyRank) : 0)
-      fused.set(id, { rrfScore, similarity: v.similarity, record: v.record })
-    }
-
-    for (const [id, kEntry] of keyMap) {
-      if (!vecMap.has(id)) {
-        fused.set(id, { rrfScore: 1 / (k + kEntry.rank), similarity: 0, record: kEntry.record })
-      }
-    }
-
-    return [...fused.values()]
-      .sort((a, b) => b.rrfScore - a.rrfScore)
-      .slice(0, limit)
-      .map(item => ({
-        ...item.record,
-        _score: item.similarity,
-      }))
+    return fuseResults(vecResults, keyResults, limit) as unknown as T[]
   }
 
   globalSearch<T>(query: string, limit: number, mode?: SearchMode): T[] {

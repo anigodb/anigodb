@@ -18,12 +18,12 @@ User Code
                │ filter, update         │ query text
                ▼                        ▼
 ┌──────────────────────┐   ┌──────────────────────────────┐
-│   Query Compiler     │   │  sqlite-hybrid               │
-│   Update Compiler    │   │  (RRF fusion, vec0, FTS5)    │
-│   Projection         │   └────────────┬─────────────────┘
-└──────────────┬───────┘                │
-               │ SQL + params            │ embed text
-               ▼                        ▼
+│   Query Compiler     │   │  RagManager                  │
+│   Update Compiler    │   │  (vec0 + FTS5, RRF fusion)   │
+│   (all ops via SQL)  │   │  uses src/rrf.ts             │
+└──────────────┬───────┘   └────────────┬─────────────────┘
+               │                         │
+               ▼                         ▼
 ┌────────────────────────────────────────────────────────┐
 │  AnigoDB (Db)                                          │
 │  Connection lifecycle, PRAGMAs, transactions           │
@@ -50,12 +50,12 @@ anigodb/
 │   ├── anigo-db.ts        # Db class (connect, transaction, collections)
 │   ├── collection.ts      # Collection class (CRUD + search)
 │   ├── query.ts           # Filter → SQL WHERE clause compiler
-│   ├── update.ts          # Update operators → SQL expression compiler
-│   ├── projection.ts      # Post-read field projection
+│   ├── update.ts          # Update operators → SQL expression compiler (all ops via json_set/json_remove)
+│   ├── rrf.ts             # Standalone RRF fusion for hybrid search scoring
 │   ├── object-id.ts       # ObjectId generator
-│   ├── errors.ts          # Error classes (incl. RAGModelError, RAGNotInstalledError)
+│   ├── errors.ts          # Error classes (incl. RAGModelError)
 │   ├── types.ts           # Public TypeScript types
-│   └── rag.ts             # RAG: createRAGIndex, search, db.search, embedder lifecycle
+│   └── rag.ts             # RagManager: embedder lifecycle, vec0 + FTS5 search, RAG index creation
 ├── test/
 │   ├── anigo-db.test.ts
 │   ├── collection.test.ts
@@ -85,6 +85,14 @@ anigodb/
 
 Core CRUD only requires `better-sqlite3-multiple-ciphers`. `sqlite-hybrid` is always installed but RAG features are lazy — they only activate on `createRAGIndex` / `search` calls. `hf-embedder` is a required runtime dependency bundled with AnigoDB.
 
+## Key Architecture
+
+- **No `RAGProvider` interface** — `Collection` receives the `RagManager` instance directly from `AnigoDB`. The interface had exactly one adapter, providing no seam.
+- **RRF fusion lives in `src/rrf.ts`** — The single module that implements Reciprocal Rank Fusion. `RagManager` imports it; `sqlite-hybrid` has its own internal copy (the dependency boundary).
+- **All update operators compile to SQL** — Including `$push` and `$pull`, which use `json_each` and `json_group_array` to mutate arrays atomically. No read-then-write window, no in-memory serialization.
+- **Search modes** — `hybrid` (default, RRF-fused vector + keyword), `vector` (semantic only), `keyword` (FTS5 only). `_score` is cosine similarity (0–1) for `hybrid` and `vector` modes.
+- **Lazy model loading** — The ONNX embedding model loads on first actual `onEmbed` call (backfill, trigger, or search query), not at `connect()` or `createRAGIndex()`.
+
 ## Design Decision Record
 
 | # | Decision | Rationale |
@@ -112,6 +120,7 @@ Core CRUD only requires `better-sqlite3-multiple-ciphers`. `sqlite-hybrid` is al
 | 21 | `createRAGIndex('field')` creates both vec0 + FTS5 | Hybrid search needs both vector and keyword indexes |
 | 22 | `hf-embedder` as required runtime dependency | Shipped as part of the standard install; configurable model |
 | 23 | Transparent model download (no explicit init) | RAG should "just work" on first createRAGIndex |
-| 24 | Search always hybrid (RRF fusion) | Best-effort ranking by default |
-| 25 | search() supports { filter } for structured filtering | Combines semantic + structured queries |
-| 26 | `:memory:` path rejected with `InvalidPathError` | sqlite-hybrid/vec0 require a real file path; in-memory mode is unsupported. Tests must use temporary file paths. |
+| 24 | Search modes: hybrid (default), vector, keyword | hybrid uses RRF fusion; vector = semantic only; keyword = FTS5 only (no model needed) |
+| 25 | `_score` is cosine similarity (0–1) for hybrid/vector | Intuitive meaning: 87% = document is 87% semantically similar to query |
+| 26 | All update operators (incl. $push/$pull) use SQL | Atomic operations via json_each/json_group_array; no read-then-write window |
+| 27 | `:memory:` path rejected with `InvalidPathError` | sqlite-hybrid/vec0 require a real file path; in-memory mode is unsupported. Tests must use temporary file paths. |

@@ -3,6 +3,7 @@ import { compileQuery } from './query.js'
 import { compileUpdate, buildUpdateSQL } from './update.js'
 import { generateObjectId } from './object-id.js'
 import { DuplicateKeyError } from './errors.js'
+import type { RagManager } from './rag.js'
 import type {
   OptionalId,
   InsertOneResult,
@@ -21,7 +22,6 @@ import type {
   IndexSpec,
   Sort,
   Filter,
-  RAGProvider,
 } from './types.js'
 
 export class Collection<T extends Record<string, unknown> = Record<string, unknown>> {
@@ -32,13 +32,9 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
     public readonly collectionName: string,
     private db: Database.Database,
     objectIdFn?: () => string,
-    private ragProvider?: RAGProvider,
+    private ragManager?: RagManager | null,
   ) {
     this.objectIdFn = objectIdFn || generateObjectId
-  }
-
-  private get ragManager() {
-    return this.ragProvider ?? null
   }
 
   private ensureTable(): void {
@@ -189,7 +185,6 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
         return null
       }
 
-      this.applyPushPull(doc, compiled.pushPull)
       const updateSql = buildUpdateSQL(compiled)
 
       if (updateSql) {
@@ -218,7 +213,6 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       let modified = 0
 
       for (const doc of docs) {
-        this.applyPushPull(doc, compiled.pushPull)
         const updateSql = buildUpdateSQL(compiled)
 
         if (!updateSql) continue
@@ -264,7 +258,6 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       if (!doc) return null
 
       const compiled = compileUpdate(update)
-      this.applyPushPull(doc, compiled.pushPull)
       const updateSql = buildUpdateSQL(compiled)
       if (updateSql) {
         const now = new Date().toISOString()
@@ -351,29 +344,6 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       }
       return r as T
     })
-  }
-
-  private applyPushPull(doc: T, pushPull: Array<{ field: string; value: unknown; operator: 'push' | 'pull' }>): T {
-    if (pushPull.length === 0) return doc
-
-    const data = JSON.parse(JSON.stringify(doc)) as Record<string, unknown>
-    for (const pp of pushPull) {
-      const arr = (data[pp.field] as unknown[]) || []
-      if (pp.operator === 'push') {
-        arr.push(pp.value)
-        data[pp.field] = arr
-      } else {
-        data[pp.field] = arr.filter(item => item !== pp.value)
-      }
-    }
-
-    const now = new Date().toISOString()
-    const serialized = this.serialize(data)
-    delete serialized._id
-    this.db.prepare(`UPDATE ${this.escapeId(this.collectionName)} SET doc = ?, updated_at = ? WHERE _id = ?`)
-      .run(JSON.stringify(serialized), now, doc._id)
-
-    return data as T
   }
 
   private applyUpdateToDoc(doc: Record<string, unknown>, update: Record<string, unknown>): Record<string, unknown> {

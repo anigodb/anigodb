@@ -3,9 +3,9 @@ import { Collection } from './collection.js'
 import { InvalidPathError } from './errors.js'
 import { generateObjectId } from './object-id.js'
 import { RagManager } from './rag.js'
-import type { AnigoDBOptions, RAGProvider, SearchMode } from './types.js'
+import type { AnigoDBOptions, SearchMode } from './types.js'
 
-export class AnigoDB implements RAGProvider {
+export class AnigoDB {
   private db: Database.Database
   private collections = new Map<string, Collection<any>>()
   private objectIdFn: () => string
@@ -70,7 +70,7 @@ export class AnigoDB implements RAGProvider {
   collection<T extends Record<string, unknown> = Record<string, unknown>>(name: string): Collection<T> {
     let col = this.collections.get(name) as Collection<T> | undefined
     if (!col) {
-      col = new Collection<T>(name, this.db, this.objectIdFn, this)
+      col = new Collection<T>(name, this.db, this.objectIdFn, this.getRagManager())
       this.collections.set(name, col)
     }
     return col
@@ -103,5 +103,4 @@ export class AnigoDB implements RAGProvider {
     this._rag?.close()
     this.db.close()
   }
-
 }

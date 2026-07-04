@@ -61,6 +61,10 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
 
       case '$push': {
         for (const [field, value] of Object.entries(fields)) {
+          const p = jsonPath(field)
+          setExprs.push(`'${p}', COALESCE((SELECT json_group_array(value) FROM (SELECT value FROM json_each(json_extract(doc, '${p}')) UNION ALL SELECT ?)), json_array(?))`)
+          setFields.push(field)
+          params.push(value, value)
           pushPull.push({ field, value, operator: 'push' })
         }
         break
@@ -68,6 +72,10 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
 
       case '$pull': {
         for (const [field, value] of Object.entries(fields)) {
+          const p = jsonPath(field)
+          setExprs.push(`'${p}', COALESCE((SELECT json_group_array(value) FROM json_each(json_extract(doc, '${p}')) WHERE value != ?), json_array())`)
+          setFields.push(field)
+          params.push(value)
           pushPull.push({ field, value, operator: 'pull' })
         }
         break
