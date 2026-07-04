@@ -18,6 +18,7 @@ export type {
   FindOneAndUpdateOptions,
   FindOneAndDeleteOptions,
   FindOneAndReplaceOptions,
+  SearchMode,
   SearchOptions,
   SearchResult,
   Stage,

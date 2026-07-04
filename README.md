@@ -21,7 +21,7 @@ const found = coll.findOne({ name: 'Alice' })
 - **Query operators** — `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, `$nin`, `$exists`, `$regex`, `$and`, `$or`, `$not`, `$nor`
 - **Update operators** — `$set`, `$unset`, `$inc`, `$push`, `$pull`, `$rename`, `$mul`, `$min`, `$max`
 - **Encryption** — full database encryption via better-sqlite3-multiple-ciphers
-- **RAG search** — hybrid vector + keyword search with local ONNX embeddings
+- **RAG search** — hybrid vector + keyword search with local ONNX embeddings; `_score` is cosine similarity (0–1); supports `hybrid`, `vector`, and `keyword` modes
 - **Transactions** — synchronous, nested via savepoints
 - **Aggregation** — `$match`, `$sort`, `$skip`, `$limit`, `$count`
 - **Indexes** — `createIndex`, `dropIndex`
@@ -68,10 +68,18 @@ db.transaction(() => {
 // Encryption
 const secure = AnigoDB.connect({ path: './secure.db', key: 'my-32-byte-hex-key-here...' })
 
-// RAG search
-secure.collection('notes').createRAGIndex('title')
-secure.collection('notes').insertOne({ title: 'Machine Learning', body: '...' })
-const results = secure.collection('notes').search('machine learning', { limit: 5 })
+// RAG search (create index first, then insert)
+const notes = secure.collection('notes')
+notes.createRAGIndex('title')
+notes.createRAGIndex('body')
+notes.insertOne({ title: 'Machine Learning', body: 'Trains models on labeled data to predict outcomes.' })
+const results = notes.search('machine learning', { limit: 5 })
+console.log(results.map(r => `${(r._score * 100).toFixed(0)}% ${r.title}`))
+// → "87% Machine Learning"  (_score is cosine similarity, 0–1)
+
+// Search modes
+notes.search('machine learning', { mode: 'vector', limit: 5 })  // semantic only
+notes.search('machine learning', { mode: 'keyword', limit: 5 }) // FTS5 only
 
 db.close()
 ```
@@ -97,6 +105,8 @@ db.close()
 ## Examples
 
 - [examples/rag.mjs](examples/rag.mjs) — Encryption, RAG index creation, and hybrid search
+- [examples/rag-search.mjs](examples/rag-search.mjs) — Minimal RAG search with cosine-similarity scores
+- [examples/score-demo.mjs](examples/score-demo.mjs) — Score visualization, mode comparison, and lazy-loading proof
 
 ## License
 

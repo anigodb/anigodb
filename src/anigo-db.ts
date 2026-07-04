@@ -3,7 +3,7 @@ import { Collection } from './collection.js'
 import { InvalidPathError } from './errors.js'
 import { generateObjectId } from './object-id.js'
 import { RagManager } from './rag.js'
-import type { AnigoDBOptions, RAGProvider } from './types.js'
+import type { AnigoDBOptions, RAGProvider, SearchMode } from './types.js'
 
 export class AnigoDB implements RAGProvider {
   private db: Database.Database
@@ -45,7 +45,7 @@ export class AnigoDB implements RAGProvider {
     })
 
     if (this.hasExistingRAGIndexes()) {
-      this.getRagManager().ensureInitialized()
+      this.getRagManager().ensureHybrid()
     }
   }
 
@@ -81,13 +81,13 @@ export class AnigoDB implements RAGProvider {
     return control()
   }
 
-  search<T>(table: string, query: string, limit: number): T[]
-  search<T = any>(query: string, options?: { limit?: number }): T[]
-  search<T>(tableOrQuery: string, queryOrOptions?: string | { limit?: number }, limit?: number): T[] {
+  search<T>(table: string, query: string, limit: number, mode?: SearchMode): T[]
+  search<T = any>(query: string, options?: { limit?: number; mode?: SearchMode }): T[]
+  search<T>(tableOrQuery: string, queryOrOptions?: string | { limit?: number; mode?: SearchMode }, limit?: number, mode?: SearchMode): T[] {
     if (typeof queryOrOptions === 'string') {
-      return this.getRagManager().search<T>(tableOrQuery, queryOrOptions, limit ?? 10)
+      return this.getRagManager().search<T>(tableOrQuery, queryOrOptions, limit ?? 10, mode)
     }
-    const rows = this.getRagManager().globalSearch<Record<string, unknown>>(tableOrQuery, queryOrOptions?.limit || 10)
+    const rows = this.getRagManager().globalSearch<Record<string, unknown>>(tableOrQuery, queryOrOptions?.limit || 10, queryOrOptions?.mode)
     return rows.map(r => {
       const doc = typeof r.doc === 'string' ? JSON.parse(r.doc) : {}
       delete r.doc

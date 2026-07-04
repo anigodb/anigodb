@@ -55,16 +55,33 @@ console.log(`Inserted ${notes.countDocuments({})} documents`)
 console.log()
 
 // --- Search ---
+// _score is cosine similarity (0-1, higher = more semantically similar)
 const results1 = notes.search('machine learning', { limit: 3 })
 console.log(`Search "machine learning" returned ${results1.length} results:`)
 for (const r of results1) {
-  console.log(`  [${r._score.toFixed(3)}] ${r.title}`)
+  console.log(`  [${(r._score * 100).toFixed(0)}%] ${r.title}`)
 }
 
 const results2 = notes.search('encrypted storage', { limit: 3 })
 console.log(`\nSearch "encrypted storage" returned ${results2.length} results:`)
 for (const r of results2) {
-  console.log(`  [${r._score.toFixed(3)}] ${r.title}`)
+  console.log(`  [${(r._score * 100).toFixed(0)}%] ${r.title}`)
+}
+
+// --- Search modes ---
+// 'hybrid' (default): combines vector similarity + keyword BM25 via RRF
+//    _score = cosine similarity from vector component (0 = no match, 1 = identical)
+// 'vector': semantic search only (needs embedding model)
+// 'keyword': FTS5 search only (no embedding model needed at query time)
+
+console.log(`\nSearch "learning" (vector mode only):`)
+for (const r of notes.search('learning', { limit: 3, mode: 'vector' })) {
+  console.log(`  [${(r._score * 100).toFixed(0)}%] ${r.title}`)
+}
+
+console.log(`\nSearch "learning" (keyword mode only):`)
+for (const r of notes.search('learning', { limit: 3, mode: 'keyword' })) {
+  console.log(`  [score ${r._score.toFixed(1)}] ${r.title}`)
 }
 
 // --- Cross-collection search ---
@@ -80,7 +97,7 @@ const all = db.search('AI', { limit: 5 })
 console.log(`\nCross-collection search "AI" returned ${all.length} results:`)
 for (const r of all) {
   const src = r._collection ? ` [${r._collection}]` : ''
-  console.log(`  [${r._score.toFixed(3)}]${src} ${r.title || r.name || '(no title)'}`)
+  console.log(`  [${(r._score * 100).toFixed(0)}%]${src} ${r.title || r.name || '(no title)'}`)
 }
 
 // --- Cleanup ---

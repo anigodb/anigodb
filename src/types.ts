@@ -113,13 +113,16 @@ export interface FindOneAndReplaceOptions {
   returnDocument?: 'before' | 'after'
 }
 
+export type SearchMode = 'hybrid' | 'vector' | 'keyword'
+
 export interface SearchOptions {
   limit?: number
+  mode?: SearchMode
 }
 
 export interface RAGProvider {
   createRAGIndex(table: string, field: string): void
-  search<T>(table: string, query: string, limit: number): T[]
+  search<T>(table: string, query: string, limit: number, mode?: SearchMode): T[]
 }
 
 export interface SearchResult<T> {

@@ -415,7 +415,8 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
     this.ensureTable()
     if (!this.ragManager) return []
     const limit = options?.limit || 10
-    const rows = this.ragManager.search<Record<string, unknown>>(this.collectionName, query, limit)
+    const mode = options?.mode
+    const rows = this.ragManager.search<Record<string, unknown>>(this.collectionName, query, limit, mode)
     return rows.map(r => {
       const doc = typeof r.doc === 'string' ? JSON.parse(r.doc) : {}
       const result: Record<string, unknown> = { _score: r._score, _id: r._id }
