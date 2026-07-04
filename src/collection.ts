@@ -2,8 +2,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { compileQuery } from './query.js'
 import { compileUpdate, buildUpdateSQL } from './update.js'
 import { generateObjectId } from './object-id.js'
-import { DuplicateKeyError, AnigoError } from './errors.js'
-import type { AnigoDB } from './anigo-db.js'
+import { DuplicateKeyError } from './errors.js'
 import type {
   OptionalId,
   InsertOneResult,
@@ -22,6 +21,7 @@ import type {
   IndexSpec,
   Sort,
   Filter,
+  RAGProvider,
 } from './types.js'
 
 export class Collection<T extends Record<string, unknown> = Record<string, unknown>> {
@@ -32,13 +32,13 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
     public readonly collectionName: string,
     private db: Database.Database,
     objectIdFn?: () => string,
-    private anigoDb?: AnigoDB,
+    private ragProvider?: RAGProvider,
   ) {
     this.objectIdFn = objectIdFn || generateObjectId
   }
 
   private get ragManager() {
-    return this.anigoDb?.getRagManager() ?? null
+    return this.ragProvider ?? null
   }
 
   private ensureTable(): void {
@@ -260,29 +260,20 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
   findOneAndUpdate(filter: Filter<T>, update: Record<string, unknown>, options?: FindOneAndUpdateOptions): T | null {
     this.ensureTable()
     return this.transaction(() => {
-      if (options?.returnDocument === 'after') {
-      const doc = this.findOne(filter, options?.sort ? { sort: options.sort } : undefined)
-        if (!doc) return null
-        const compiled = compileUpdate(update)
-        const docData = this.applyPushPull(doc, compiled.pushPull)
-        const updateSql = buildUpdateSQL(compiled)
-        if (updateSql) {
-          const now = new Date().toISOString()
-          this.db.prepare(`UPDATE ${this.escapeId(this.collectionName)} SET doc = ${updateSql}, updated_at = ? WHERE _id = ?`)
-            .run(...compiled.params, now, doc._id)
-        }
-        return this.findOne({ _id: doc._id } as Filter<T>)
-      }
-
       const doc = this.findOne(filter, options?.sort ? { sort: options.sort } : undefined)
       if (!doc) return null
+
       const compiled = compileUpdate(update)
-      const docData = this.applyPushPull(doc, compiled.pushPull)
+      this.applyPushPull(doc, compiled.pushPull)
       const updateSql = buildUpdateSQL(compiled)
       if (updateSql) {
         const now = new Date().toISOString()
         this.db.prepare(`UPDATE ${this.escapeId(this.collectionName)} SET doc = ${updateSql}, updated_at = ? WHERE _id = ?`)
           .run(...compiled.params, now, doc._id)
+      }
+
+      if (options?.returnDocument === 'after') {
+        return this.findOne({ _id: doc._id } as Filter<T>)
       }
       return doc
     })
@@ -405,11 +396,10 @@ export class Collection<T extends Record<string, unknown> = Record<string, unkno
       delete result[field]
     }
 
-    for (let i = 0; i < compiled.setExprs.length; i++) {
+    for (let i = 0; i < compiled.setFields.length; i++) {
       const expr = compiled.setExprs[i]
-      const match = expr.match(/'\$\.(.+?)', \?/)
-      if (match) {
-        result[match[1]] = compiled.params[i]
+      if (expr.endsWith(', ?')) {
+        result[compiled.setFields[i]] = compiled.params[i]
       }
     }
 

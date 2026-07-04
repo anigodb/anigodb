@@ -2,32 +2,29 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { rmSync, existsSync } from 'fs'
-import Database from 'better-sqlite3-multiple-ciphers'
-import { Collection } from '../src/collection.js'
-import { generateObjectId } from '../src/object-id.js'
+import { AnigoDB } from '../src/anigo-db.js'
 
-function createTestDb(): { db: Database.Database; path: string } {
+function createTestDb(): { db: AnigoDB; path: string } {
   const path = join(tmpdir(), `anigodb-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
-  const db = new Database(path)
+  const db = AnigoDB.connect({ path })
   return { db, path }
 }
 
-function cleanup(db: Database.Database, path: string) {
+function cleanup(db: AnigoDB, path: string) {
   db.close()
   if (existsSync(path)) rmSync(path)
 }
 
 describe('Collection', () => {
-  let db: Database.Database
+  let db: AnigoDB
   let path: string
-  let col: Collection
+  let col: ReturnType<typeof db.collection>
 
   beforeEach(() => {
     const created = createTestDb()
     db = created.db
     path = created.path
-    db.function('regexp', (pattern: string, value: string) => new RegExp(pattern).test(value))
-    col = new Collection('test', db)
+    col = db.collection('test')
   })
 
   afterEach(() => {
@@ -161,6 +158,12 @@ describe('Collection', () => {
     const { insertedId } = col.insertOne({ name: 'Alice', age: 30 })
     const doc = col.findOneAndUpdate({ _id: insertedId }, { $set: { age: 31 } })
     expect(doc!.age).toBe(30) // returns original by default
+  })
+
+  it('findOneAndUpdate with returnDocument after returns updated doc', () => {
+    const { insertedId } = col.insertOne({ name: 'Alice', age: 30 })
+    const doc = col.findOneAndUpdate({ _id: insertedId }, { $set: { age: 31 } }, { returnDocument: 'after' })
+    expect(doc!.age).toBe(31)
   })
 
   it('findOneAndDelete returns deleted doc', () => {

@@ -1,5 +1,6 @@
 export interface CompiledUpdate {
   setExprs: string[]
+  setFields: string[]
   removePaths: string[]
   params: unknown[]
   pushPull: Array<{ field: string; value: unknown; operator: 'push' | 'pull' }>
@@ -11,6 +12,7 @@ function jsonPath(path: string): string {
 
 export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
   const setExprs: string[] = []
+  const setFields: string[] = []
   const removePaths: string[] = []
   const params: unknown[] = []
   const pushPull: Array<{ field: string; value: unknown; operator: 'push' | 'pull' }> = []
@@ -23,6 +25,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
         for (const [field, value] of Object.entries(fields)) {
           const p = jsonPath(field)
           setExprs.push(`'${p}', ?`)
+          setFields.push(field)
           params.push(value)
         }
         break
@@ -39,6 +42,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
         for (const [field, value] of Object.entries(fields)) {
           const p = jsonPath(field)
           setExprs.push(`'${p}', COALESCE(json_extract(doc, '${p}'), 0) + ?`)
+          setFields.push(field)
           params.push(value)
         }
         break
@@ -50,6 +54,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
           const toPath = jsonPath(to as string)
           removePaths.push(fromPath)
           setExprs.push(`'${toPath}', json_extract(doc, '${fromPath}')`)
+          setFields.push(to as string)
         }
         break
       }
@@ -72,6 +77,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
         for (const [field, value] of Object.entries(fields)) {
           const p = jsonPath(field)
           setExprs.push(`'${p}', COALESCE(json_extract(doc, '${p}'), 1) * ?`)
+          setFields.push(field)
           params.push(value)
         }
         break
@@ -81,6 +87,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
         for (const [field, value] of Object.entries(fields)) {
           const p = jsonPath(field)
           setExprs.push(`'${p}', MIN(COALESCE(json_extract(doc, '${p}'), ?), ?)`)
+          setFields.push(field)
           params.push(value, value)
         }
         break
@@ -90,6 +97,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
         for (const [field, value] of Object.entries(fields)) {
           const p = jsonPath(field)
           setExprs.push(`'${p}', MAX(COALESCE(json_extract(doc, '${p}'), ?), ?)`)
+          setFields.push(field)
           params.push(value, value)
         }
         break
@@ -97,7 +105,7 @@ export function compileUpdate(update: Record<string, unknown>): CompiledUpdate {
     }
   }
 
-  return { setExprs, removePaths, params, pushPull }
+  return { setExprs, setFields, removePaths, params, pushPull }
 }
 
 export function buildUpdateSQL(compiled: CompiledUpdate): string {

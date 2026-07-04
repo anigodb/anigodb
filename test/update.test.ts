@@ -62,7 +62,7 @@ describe('compileUpdate', () => {
 
 describe('buildUpdateSQL', () => {
   it('returns empty string for no changes', () => {
-    const sql = buildUpdateSQL({ setExprs: [], removePaths: [], params: [], pushPull: [] })
+    const sql = buildUpdateSQL({ setExprs: [], setFields: [], removePaths: [], params: [], pushPull: [] })
     expect(sql).toBe('')
   })
 

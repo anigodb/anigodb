@@ -46,17 +46,16 @@ console.log('Database:', dbPath)
 console.log('Encryption key length:', key.length, 'hex chars')
 
 const db = AnigoDB.connect({ path: dbPath, key, embedding:{
-  model: 'Xenova/multilingual-e5-small',
-  dtype: 'q4',
+  model: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+  dtype: 'q8',
   pooling: 'mean',
   normalize: true,
-  vectorSize: 384,
+  vectorSize: 1024,
 } })
 const items = db.collection('items')
 
-// --- Bulk insert 200k records ---
 
-const COUNT = 200
+const COUNT = 2;
 console.log(`\nInserting ${COUNT.toLocaleString()} records...`)
 
 const start = performance.now()
