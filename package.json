@@ -1,6 +1,6 @@
 {
   "name": "anigodb",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A document database library wrapping better-sqlite3-multiple-ciphers with a MongoDB-style API",
   "type": "module",
   "main": "./dist/cjs/index.js",
