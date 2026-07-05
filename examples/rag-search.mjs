@@ -14,24 +14,20 @@ const docs = db.collection('notes')
 
 // 1. Insert data
 docs.insertMany([
-  { title: 'Quantum Computing',   body: 'Uses qubits and superposition for exponential speedup.' },
+  { title: 'Profile of Perry',   body: 'Perry is my wife. She is very pretty' },
   { title: 'Machine Learning',     body: 'Trains models on labeled data to predict outcomes.' },
   { title: 'Viennese Coffee',      body: 'Melange is espresso topped with foamed milk.' },
 ])
 
 // 2. Create RAG index on the fields you want to search
 docs.createRAGIndex('title')
-docs.createRAGIndex('body')
 
-console.log('\nSearch "quantum computing":')
-for (const r of docs.search('quantum computing', { limit: 3 })) {
+console.log('\nSearch "Profile of Perry":')
+for (const r of docs.search('Profile of Perry', { limit: 3 })) {
   console.log(`  ${(r._score * 100).toFixed(0)}%  ${r.title}`)
 }
 
-console.log('\nSearch "coffee melange":')
-for (const r of docs.search('coffee melange', { limit: 3 })) {
-  console.log(`  ${(r._score * 100).toFixed(0)}%  ${r.title}`)
-}
+
 
 db.close()
 rmSync(dbPath)
