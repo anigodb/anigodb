@@ -21,7 +21,7 @@ const found = coll.findOne({ name: 'Alice' })
 - **Query operators** — `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, `$nin`, `$exists`, `$regex`, `$and`, `$or`, `$not`, `$nor`
 - **Update operators** — `$set`, `$unset`, `$inc`, `$push`, `$pull`, `$rename`, `$mul`, `$min`, `$max`
 - **Encryption** — full database encryption via better-sqlite3-multiple-ciphers
-- **RAG search** — hybrid vector + keyword search with local ONNX embeddings; `_score` is cosine similarity (0–1); supports `hybrid`, `vector`, and `keyword` modes
+- **RAG search** — hybrid vector + keyword search with local ONNX embeddings; falls back to keyword-only when no embedding model is configured; `_score` is cosine similarity (0–1) for vector results, raw BM25 for keyword; supports `hybrid`, `vector`, and `keyword` modes
 - **Transactions** — synchronous, nested via savepoints
 - **Aggregation** — `$match`, `$sort`, `$skip`, `$limit`, `$count`
 - **Indexes** — `createIndex`, `dropIndex`
@@ -68,18 +68,28 @@ db.transaction(() => {
 // Encryption
 const secure = AnigoDB.connect({ path: './secure.db', key: 'my-32-byte-hex-key-here...' })
 
-// RAG search (create index first, then insert)
-const notes = secure.collection('notes')
-notes.createRAGIndex('title')
+// RAG search — without an embedding model, creates FTS5 only (keyword search)
+const db2 = AnigoDB.connect({ path: './data.db' })
+const notes = db2.collection('notes')
 notes.createRAGIndex('body')
-notes.insertOne({ title: 'Machine Learning', body: 'Trains models on labeled data to predict outcomes.' })
-const results = notes.search('machine learning', { limit: 5 })
-console.log(results.map(r => `${(r._score * 100).toFixed(0)}% ${r.title}`))
-// → "87% Machine Learning"  (_score is cosine similarity, 0–1)
+notes.insertOne({ body: 'Trains models on labeled data.' })
+const kw = notes.search('labeled data', { limit: 5 })
+// → keyword search, _score is raw BM25
+
+// With an embedding model → full hybrid (vector + keyword) search
+const db3 = AnigoDB.connect({
+  path: './hybrid.db',
+  embedding: { model: 'onnx-community/Qwen3-Embedding-0.6B-ONNX', dtype: 'q8' },
+})
+const articles = db3.collection('articles')
+articles.createRAGIndex('title')
+articles.insertOne({ title: 'Machine Learning' })
+const results = articles.search('machine learning', { limit: 5 })
+// _score is cosine similarity (0–1)
 
 // Search modes
-notes.search('machine learning', { mode: 'vector', limit: 5 })  // semantic only
-notes.search('machine learning', { mode: 'keyword', limit: 5 }) // FTS5 only
+articles.search('machine learning', { mode: 'vector', limit: 5 })  // semantic only
+articles.search('machine learning', { mode: 'keyword', limit: 5 }) // FTS5 only
 
 db.close()
 ```
@@ -104,6 +114,7 @@ db.close()
 
 ## Examples
 
+- [examples/optional-embedding.mjs](examples/optional-embedding.mjs) — Keyword-only vs hybrid search, meta persistence, reopen without `embedding`
 - [examples/rag.mjs](examples/rag.mjs) — Encryption, RAG index creation, and hybrid search
 - [examples/rag-search.mjs](examples/rag-search.mjs) — Minimal RAG search with cosine-similarity scores
 - [examples/score-demo.mjs](examples/score-demo.mjs) — Score visualization, mode comparison, and lazy-loading proof

@@ -39,9 +39,15 @@ interface AnigoDBOptions {
   /** Custom ObjectId generator function */
   objectId?: () => string;
 
-  /** Embedding model configuration for RAG features. Lazy — model loads on first createRAGIndex(). */
+  /**
+   * Embedding model configuration for RAG features.
+   * Omit for keyword-only search (FTS5, no vector index).
+   * When provided with `model`, enables full hybrid/vector/keyword search.
+   * Config is persisted to `_anigodb_meta` on first `createRAGIndex()` and
+   * loaded automatically on reconnect — no need to pass `embedding` on reopen.
+   */
   embedding?: {
-    /** HuggingFace model ID. Default: 'onnx-community/Qwen3-Embedding-0.6B-ONNX' */
+    /** HuggingFace model ID. Required for vector/hybrid search. Omit to disable vector embeddings. */
     model?: string;
     /** Quantization. Default: 'q8' */
     dtype?: string;

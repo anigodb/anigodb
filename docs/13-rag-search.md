@@ -2,10 +2,29 @@
 
 AnigoDB's RAG (Retrieval-Augmented Generation) search combines **vector semantic search** with **FTS5 keyword search** using Reciprocal Rank Fusion (RRF). It runs entirely locally — all embedding work is delegated to `sqlite-hybrid`, which uses `hf-embedder` under the hood.
 
-## Prerequisites
+## Embedding Configuration
 
-```bash
-npm install anigodb
+RAG is **optional**. You control it via the `embedding` option in `AnigoDB.connect()`:
+
+| `embedding` | Behaviour |
+|---|---|
+| Omitted | `createRAGIndex` creates FTS5 only. `search()` falls back to keyword mode. |
+| `{ model: '...' }` | Full hybrid/vector/keyword search. vec0 + FTS5 created. |
+
+When an embedding model is configured, the config is persisted to `_anigodb_meta` at `createRAGIndex()` time. On subsequent connections, the saved config is loaded automatically — you don't need to pass `embedding` on reopen.
+
+```typescript
+// Keyword-only: no model needed
+const db1 = AnigoDB.connect({ path: './db.db' })
+db1.collection('notes').createRAGIndex('title')  // FTS5 only
+
+// Hybrid: model required
+const db2 = AnigoDB.connect({ path: './db.db', embedding: { model: '...' } })
+db2.collection('notes').createRAGIndex('title')  // vec0 + FTS5
+
+// Reopen: saved meta loads automatically
+const db3 = AnigoDB.connect({ path: './db.db' })
+db3.collection('notes').search('query')          // full hybrid search
 ```
 
 ## Creating a RAG Index
@@ -18,7 +37,7 @@ articles.createRAGIndex('title');
 articles.createRAGIndex('body');
 ```
 
-`createRAGIndex()` is **synchronous** — it blocks until both a **vector index** (`vec0` virtual table via sqlite-vec, dimension 1024) and an **FTS5 index** are created in SQLite. Triggers are installed so new/updated documents are automatically enqueued for embedding. All embedding work is handled by `sqlite-hybrid`.
+`createRAGIndex()` is **synchronous** — it blocks until the FTS5 index (and optionally the `vec0` vector index) is created in SQLite. Triggers are installed so new/updated documents are automatically indexed.
 
 ## Searching
 
@@ -60,77 +79,78 @@ articles.search('new document', { flush: true });
 interface SearchOptions {
   limit?: number;           // Max results (default: 10)
   filter?: Filter<T>;       // Structured filter (same operators as find())
+  mode?: 'hybrid' | 'vector' | 'keyword';  // Search mode. Default: 'hybrid'
   flush?: boolean;          // Wait for pending embeddings (default: false)
 }
 ```
 
+When no embedding model is configured, mode defaults to `keyword` regardless of what you pass. `vector` mode throws `RAGNotConfiguredError` if a vector search is attempted without a model.
+
 ## How It Works
 
-### Index Time
+### Index Time — With Embedding Model
 
 ```
 createRAGIndex('body')
   │
   ├── sqlite-hybrid.createVectorIndex('articles', 'body')
-  │     └── CREATE VIRTUAL TABLE vec_articles_body USING vec0(
-  │           embedding float[1024] distance_metric=cosine
-  │         )
-  │     └── CREATE TRIGGER articles_ai AFTER INSERT ON articles ...
-  │     └── CREATE TRIGGER articles_au AFTER UPDATE ON articles ...
-  │     └── CREATE TRIGGER articles_ad AFTER DELETE ON articles ...
+  │     └── CREATE VIRTUAL TABLE vec_articles_body USING vec0(...)
+  │     └── CREATE TRIGGER articles_ai AFTER INSERT ...
+  │     └── CREATE TRIGGER articles_au AFTER UPDATE ...
+  │     └── CREATE TRIGGER articles_ad AFTER DELETE ...
   │
   └── sqlite-hybrid.createFTS5('articles', 'body')
-        └── CREATE VIRTUAL TABLE fts_articles_body USING fts5(
-              content=articles, content_rowid=rowid, body
-            )
+        └── CREATE VIRTUAL TABLE fts_articles_body USING fts5(...)
         └── CREATE TRIGGER fts_articles_ai AFTER INSERT ...
         └── CREATE TRIGGER fts_articles_au AFTER UPDATE ...
         └── CREATE TRIGGER fts_articles_ad AFTER DELETE ...
 ```
 
+### Index Time — Without Embedding Model
+
+```
+createRAGIndex('body')
+  │
+  └── sqlite-hybrid.createFTS5('articles', 'body')
+        └── (FTS5 only, no vec0)
+```
+
 Inserts/updates enqueue raw text. Calling `search({ flush: true })` drains the queue synchronously — `sqlite-hybrid` computes embeddings for each pending entry and writes them to `vec0` before the search runs.
 
-### Query Time
+### Query Time — With Embedding Model
 
 ```
 search("machine learning")
   │
-  ├── 1. Embed query
-  │     sqlite-hybrid embeds the query string
-  │     → Float32Array[1024]
+  ├── 1. Embed query → Float32Array[1024]
   │
   ├── 2. Vector search
-  │     SELECT rowid, distance
-  │     FROM vec_articles_body
-  │     WHERE embedding MATCH ?
-  │     ORDER BY distance
-  │     LIMIT K
+  │     SELECT rowid, distance FROM vec_articles_body ...
   │
   ├── 3. Keyword search (FTS5 BM25)
-  │     SELECT rowid, rank
-  │     FROM fts_articles_body
-  │     WHERE body MATCH 'machine learning'
-  │     ORDER BY rank
-  │     LIMIT K
+  │     SELECT rowid, rank FROM fts_articles_body ...
   │
   ├── 4. RRF Fusion
   │     score = 1/(60 + rank_vec) + 1/(60 + rank_fts)
-  │     ORDER BY score DESC
   │
-  ├── 5. Optional filter
-  │     WHERE json_extract(doc, '$.year') = ?
+  └── 5. Join + return
+        SELECT _id, doc, ..., score AS _score FROM articles ...
+```
+
+### Query Time — Without Embedding Model
+
+```
+search("machine learning")
   │
-  └── 6. Join + return
-        SELECT _id, doc, created_at, updated_at, score AS _score
-        FROM articles
-        JOIN results ON articles.rowid = results.rowid
-        ORDER BY _score DESC
+  └── Keyword search (FTS5 BM25)
+        SELECT rowid, rank FROM fts_articles_body ...
+        ORDER BY rank
         LIMIT ?
 ```
 
 ## Limitations (MVP)
 
-- Embedder model is configurable via `AnigoDB.connect({ embedding: { model } })` but limited to hf-embedder's supported models. No plugin system for fully custom embedders yet.
+- Embedder model is required for vector/hybrid search. Without it, only keyword (FTS5) search is available. No plugin system for fully custom embedders yet.
 - No snippet/chunk highlighting in search results.
 - No `$elemMatch` or array path indexing for RAG.
 - `db.search()` returns all matching documents across collections in one flat list — no grouping.

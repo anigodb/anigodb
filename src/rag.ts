@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import { SqliteHybrid } from 'sqlite-hybrid'
 import { Embedder } from 'hf-embedder'
-import { RAGModelError } from './errors.js'
+import { RAGModelError, RAGNotConfiguredError } from './errors.js'
 import { fuseResults } from './rrf.js'
 import type { EmbeddingOptions, SearchMode } from './types.js'
 
@@ -18,18 +18,51 @@ export class RagManager {
     this.vectorSize = options?.vectorSize || 0
   }
 
+  static readMeta(db: Database.Database): EmbeddingOptions | null {
+    try {
+      const row = db.prepare('SELECT config FROM _anigodb_meta WHERE id = 1').get() as { config: string } | undefined
+      if (!row) return null
+      const meta = JSON.parse(row.config).embedding as EmbeddingOptions
+      if (!meta.model) return null
+      return meta
+    } catch {
+      return null
+    }
+  }
+
+  private saveMeta(): void {
+    const config: Record<string, unknown> = {}
+    if (this.options?.model) config.model = this.options.model
+    if (this.options?.dtype) config.dtype = this.options.dtype
+    if (this.options?.device) config.device = this.options.device
+    if (this.options?.pooling) config.pooling = this.options.pooling
+    config.vectorSize = this.vectorSize
+
+    this.db.exec(`CREATE TABLE IF NOT EXISTS _anigodb_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      config TEXT NOT NULL
+    )`)
+    this.db.prepare(`INSERT OR REPLACE INTO _anigodb_meta (id, config) VALUES (1, ?)`)
+      .run(JSON.stringify({ embedding: config }))
+  }
+
   ensureHybrid(): void {
     if (this.hybridReady) return
 
-    if (!this.vectorSize) {
-      this.loadEmbedder()
-      this.vectorSize = this.embedder.embedSync('test').length
+    if (this.options?.model) {
+      if (!this.embedder) this.loadEmbedder()
+      if (!this.vectorSize) {
+        this.vectorSize = this.embedder.embedSync('test').length
+      }
     }
 
     this.hybrid = new SqliteHybrid(this.db, {
-      vectorSize: this.vectorSize,
+      vectorSize: this.vectorSize || 1,
       onEmbed: (content: string | string[]) => {
-        if (!this.embedder) this.loadEmbedder()
+        if (!this.embedder) {
+          if (!this.options?.model) throw new RAGNotConfiguredError('Vector search requires an embedding model')
+          this.loadEmbedder()
+        }
         if (Array.isArray(content)) return this.embedder!.embedSync(content)
         return this.embedder!.embedSync(content)
       },
@@ -58,12 +91,17 @@ export class RagManager {
   createRAGIndex(table: string, field: string): void {
     this.ensureHybrid()
     const extractExpr = `json_extract(doc, '$.${field}')`
-    this.hybrid!.createVectorIndex(table, extractExpr)
+    if (this.embedder) {
+      this.hybrid!.createVectorIndex(table, extractExpr)
+      this.saveMeta()
+    }
     this.hybrid!.createFTS5(table, extractExpr)
   }
 
   search<T>(table: string, query: string, limit: number, mode: SearchMode = 'hybrid'): T[] {
     this.ensureHybrid()
+
+    if (!this.embedder) mode = 'keyword'
 
     if (mode === 'vector') {
       const results = this.hybrid!.vectorSearch<Record<string, unknown>>(table, query, limit)
@@ -86,6 +124,8 @@ export class RagManager {
 
   globalSearch<T>(query: string, limit: number, mode?: SearchMode): T[] {
     this.ensureHybrid()
+
+    if (!this.embedder) mode = 'keyword'
 
     if (mode === 'vector') {
       const results = this.hybrid!.vectorSearch(query, limit)

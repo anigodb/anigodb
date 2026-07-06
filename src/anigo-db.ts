@@ -9,7 +9,7 @@ export class AnigoDB {
   private db: Database.Database
   private collections = new Map<string, Collection<any>>()
   private objectIdFn: () => string
-  private _rag: RagManager | null = null
+  private _rag: RagManager | undefined = undefined
 
   static connect(options: AnigoDBOptions): AnigoDB {
     if (options.path === ':memory:') {
@@ -45,7 +45,11 @@ export class AnigoDB {
     })
 
     if (this.hasExistingRAGIndexes()) {
-      this.getRagManager().ensureHybrid()
+      const savedMeta = RagManager.readMeta(this.db)
+      if (savedMeta) {
+        this._rag = new RagManager(this.db, savedMeta)
+        this._rag.ensureHybrid()
+      }
     }
   }
 
@@ -61,8 +65,16 @@ export class AnigoDB {
   }
 
   getRagManager(): RagManager {
-    if (!this._rag) {
-      this._rag = new RagManager(this.db, this.options.embedding)
+    if (this._rag === undefined) {
+      const userConfig = this.options.embedding
+      const savedMeta = RagManager.readMeta(this.db)
+      if (savedMeta) {
+        this._rag = new RagManager(this.db, savedMeta)
+      } else if (userConfig?.model) {
+        this._rag = new RagManager(this.db, userConfig)
+      } else {
+        this._rag = new RagManager(this.db, undefined)
+      }
     }
     return this._rag
   }
@@ -100,7 +112,7 @@ export class AnigoDB {
   }
 
   close(): void {
-    this._rag?.close()
+    if (this._rag) this._rag.close()
     this.db.close()
   }
 }

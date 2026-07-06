@@ -86,7 +86,7 @@ describe('AnigoDB', () => {
 
   it('reopen with RAG indexes does not break inserts', { timeout: 30000 }, () => {
     const path = join(tmpdir(), `anigodb-rag-reopen-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
-    const db1 = AnigoDB.connect({ path })
+    const db1 = AnigoDB.connect({ path, embedding: { model: 'onnx-community/Qwen3-Embedding-0.6B-ONNX', dtype: 'q8' } })
     const col1 = db1.collection('items')
     col1.insertOne({ title: 'first' })
     db1.createRAGIndex('items', 'title')
